@@ -146,8 +146,8 @@ bot.action(/set_default_(.+)/, isAuthenticated, async (ctx) => {
 
         console.log(`Setting wallet ${walletId} as default`);
         const response = await axios.post(
-            `${API_BASE_URL}/wallets/${walletId}/default`,
-            {},
+            `${API_BASE_URL}/wallets/default`,
+            { walletId },
             {
                 headers: {
                     Authorization: `Bearer ${token}`
