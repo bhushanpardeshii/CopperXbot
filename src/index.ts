@@ -1,4 +1,4 @@
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import axios from 'axios';
 import { getSession, storeSession, logoutUser } from './db';
 import dotenv from 'dotenv';
@@ -88,6 +88,80 @@ bot.command('balance', isAuthenticated, async (ctx) => {
             status: error.response?.status
         });
         ctx.reply('⚠️ Failed to fetch balance. Please try again later.');
+    }
+});
+
+bot.command('wallets', isAuthenticated, async (ctx) => {
+    console.log("👛 Wallets command received");
+    try {
+        const token = ctx.state.token;
+        console.log('🔑 Token from state:', token);
+
+        const response = await axios.get(`${API_BASE_URL}/wallets`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+        console.log('📊 API Response:', response.data);
+
+        const wallets = response.data;
+        if (!wallets.length) {
+            return ctx.reply('👛 You have no wallets.');
+        }
+
+        let message = '👛 *Your Wallets:*';
+        wallets.forEach((wallet: any) => {
+            message += `\n\n🔹 *${wallet.network} Wallet*`;
+            message += `\nAddress: \`${wallet.walletAddress}\``;
+            message += `\nType: ${wallet.walletType}`;
+            message += `\nDefault: ${wallet.isDefault ? '✅' : '❌'}`;
+            message += `\nCreated: ${new Date(wallet.createdAt).toLocaleDateString()}`;
+        });
+
+        // Create inline keyboard buttons for each wallet
+        const buttons = wallets.map((wallet: any) => [
+            Markup.button.callback(
+                `Set ${wallet.network} as Default ${wallet.isDefault ? '✅' : ''}`,
+                `set_default_${wallet.id}`
+            )
+        ]);
+
+        const keyboard = Markup.inlineKeyboard(buttons);
+        await ctx.replyWithMarkdown(message, keyboard);
+    } catch (error: any) {
+        console.error('❌ Error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        });
+        ctx.reply('⚠️ Failed to fetch wallets. Please try again later.');
+    }
+});
+
+// Handle callback queries for setting default wallet
+bot.action(/set_default_(.+)/, isAuthenticated, async (ctx) => {
+    try {
+        const walletId = ctx.match[1];
+        const token = ctx.state.token;
+
+        console.log(`Setting wallet ${walletId} as default`);
+        const response = await axios.post(
+            `${API_BASE_URL}/wallets/${walletId}/default`,
+            {},
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            }
+        );
+
+        await ctx.answerCbQuery('✅ Default wallet updated successfully!');
+        // Refresh the wallets list by calling the wallets command
+        await ctx.reply('🔄 Refreshing wallet list...');
+        await ctx.reply('/wallets');
+    } catch (error: any) {
+        console.error('Error setting default wallet:', error);
+        await ctx.answerCbQuery('❌ Failed to set default wallet');
     }
 });
 
