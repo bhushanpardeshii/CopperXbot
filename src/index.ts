@@ -45,9 +45,247 @@ bot.start((ctx) => {
     ctx.reply('Welcome to Copperx Bot! Use /login to authenticate.');
 });
 
+// Add handler for menu buttons
+bot.hears(['💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 Batch Send', '💸 Transfers', '🔑 Login', '🚪 Logout'], async (ctx) => {
+    const command = ctx.message.text;
+
+    // First check authentication for protected commands
+    if (command !== '🔑 Login' && command !== '🚪 Logout') {
+        const userId = ctx.from.id;
+        const userData = await getSession(userId);
+
+        if (!userData) {
+            return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        }
+
+        try {
+            const parsedData = JSON.parse(userData);
+            ctx.state.userData = parsedData;
+            ctx.state.token = parsedData.accessToken;
+        } catch (error) {
+            return ctx.reply('❌ Session error. Please login again using /login');
+        }
+    }
+
+    switch (command) {
+        case '💰 Balance':
+            console.log("💰 Balance command received");
+            try {
+                const token = ctx.state.token;
+                const response = await axios.get(`${API_BASE_URL}/wallets/balances`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                const wallets = response.data;
+                if (!wallets.length) {
+                    return ctx.reply('💰 Your wallet has no funds.');
+                }
+
+                let message = '📊 *Your Wallet Balances:*';
+                wallets.forEach((wallet: any) => {
+                    const isTestnet = ['80002'].includes(wallet.network);
+                    message += `\n🔹 *${wallet.network}${isTestnet ? ' (Testnet)' : ''} Wallet*`;
+                    wallet.balances.forEach((balance: any) => {
+                        message += `\n    - ${balance.balance} ${balance.symbol}`;
+                    });
+                });
+
+                ctx.replyWithMarkdown(message);
+            } catch (error: any) {
+                console.error('❌ Error details:', error);
+                ctx.reply('⚠️ Failed to fetch balance. Please try again later.');
+            }
+            break;
+        case '👛 Wallets':
+            console.log("👛 Wallets command received");
+            try {
+                const token = ctx.state.token;
+                const response = await axios.get(`${API_BASE_URL}/wallets`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                const wallets = response.data;
+                if (!wallets.length) {
+                    return ctx.reply('👛 You have no wallets.');
+                }
+
+                let message = '👛 *Your Wallets:*';
+                wallets.forEach((wallet: any) => {
+                    message += `\n\n🔹 *${wallet.network} Wallet*`;
+                    message += `\nAddress: \`${wallet.walletAddress}\``;
+                    message += `\nType: ${wallet.walletType}`;
+                    message += `\nDefault: ${wallet.isDefault ? '✅' : '❌'}`;
+                    message += `\nCreated: ${new Date(wallet.createdAt).toLocaleDateString()}`;
+                });
+
+                const buttons = wallets.map((wallet: any) => [
+                    Markup.button.callback(
+                        `Set ${wallet.network} as Default ${wallet.isDefault ? '✅' : ''}`,
+                        `set_default_${wallet.id}`
+                    )
+                ]);
+
+                const keyboard = Markup.inlineKeyboard(buttons);
+                await ctx.replyWithMarkdown(message, keyboard);
+            } catch (error: any) {
+                console.error('❌ Error details:', error);
+                ctx.reply('⚠️ Failed to fetch wallets. Please try again later.');
+            }
+            break;
+        case '📤 Send':
+            console.log("📤 Send command received");
+            try {
+                sessions.set(ctx.from.id, {
+                    step: 'send_wallet_address',
+                    sendData: {
+                        purposeCode: 'self',
+                        currency: 'USDC'
+                    },
+                    token: ctx.state.token
+                });
+                const cancelButton = Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+                ]);
+                ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+            } catch (error: any) {
+                console.error('Error:', error);
+                ctx.reply('❌ Failed to start transfer. Please try again.');
+            }
+            break;
+        case '📥 Withdraw':
+            console.log("💸 Wallet Withdraw command received");
+            try {
+                sessions.set(ctx.from.id, {
+                    step: 'withdraw_wallet_address',
+                    withdrawData: {
+                        purposeCode: 'self',
+                        currency: 'USDC'
+                    },
+                    token: ctx.state.token
+                });
+                const cancelButton = Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+                ]);
+                ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+            } catch (error: any) {
+                console.error('Error:', error);
+                ctx.reply('❌ Failed to start withdrawal. Please try again.');
+            }
+            break;
+        case '📦 Batch Send':
+            console.log("📤 Send Batch command received");
+            try {
+                sessions.set(ctx.from.id, {
+                    step: 'batch_wallet_address',
+                    batchData: {
+                        requests: []
+                    },
+                    token: ctx.state.token
+                });
+                const cancelButton = Markup.inlineKeyboard([
+                    [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+                ]);
+                ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+            } catch (error: any) {
+                console.error('Error:', error);
+                ctx.reply('❌ Failed to start batch transfer. Please try again.');
+            }
+            break;
+        case '💸 Transfers':
+            console.log("💸 Transfers command received");
+            try {
+                const token = ctx.state.token;
+                const params = {
+                    page: 1,
+                    limit: 10,
+                    sync: true
+                };
+
+                const response = await axios.get(`${API_BASE_URL}/transfers`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    },
+                    params
+                });
+
+                const { data, count, hasMore } = response.data;
+                if (!data.length) {
+                    return ctx.reply('💸 No transfers found.');
+                }
+
+                let message = '💸 *Your Recent Transfers:*\n';
+                data.forEach((transfer: any) => {
+                    message += `\n🔹 *Transfer ID:* ${transfer.id}`;
+                    message += `\nType: ${transfer.type}`;
+                    message += `\nStatus: ${transfer.status}`;
+                    message += `\nAmount: ${transfer.amount / 1e8} ${transfer.currency}`;
+                    message += `\nFee: ${transfer.totalFee} ${transfer.feeCurrency}`;
+                    message += `\nDate: ${new Date(transfer.createdAt).toLocaleString()}`;
+                    message += `\nFrom: ${transfer.sourceCountry?.toUpperCase() || 'N/A'}`;
+                    message += `\nTo: ${transfer.destinationCountry?.toUpperCase() || 'N/A'}`;
+                    message += '\n';
+                });
+
+                message += `\n📊 Page ${params.page} of ${Math.ceil(count / params.limit)}`;
+                if (hasMore) {
+                    message += '\n\nUse /transfers_next to see more transfers.';
+                }
+
+                const buttons = [];
+                if (params.page > 1) {
+                    buttons.push(Markup.button.callback('⬅️ Previous', 'transfers_prev'));
+                }
+                if (hasMore) {
+                    buttons.push(Markup.button.callback('Next ➡️', 'transfers_next'));
+                }
+                const keyboard = buttons.length > 0 ? Markup.inlineKeyboard(buttons) : undefined;
+
+                await ctx.replyWithMarkdown(message, keyboard);
+            } catch (error: any) {
+                console.error('❌ Error details:', error);
+                ctx.reply('⚠️ Failed to fetch transfers. Please try again later.');
+            }
+            break;
+        case '🔑 Login':
+            console.log("🔑 Login command received");
+            const cancelButton = Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+            ]);
+            ctx.reply('Please enter your email address:', cancelButton);
+            sessions.set(ctx.from.id, { step: 'awaiting_email' });
+            break;
+        case '🚪 Logout':
+            console.log("👋 Logout command received");
+            await logoutUser(ctx.from.id);
+            ctx.reply('✅ You have been logged out successfully.');
+            break;
+    }
+});
+
+// Add a command to show menu anytime
+bot.command('menu', (ctx) => {
+    const menuKeyboard = Markup.keyboard([
+        ['💰 Balance', '👛 Wallets'],
+        ['📤 Send', '📥 Withdraw'],
+        ['📦 Batch Send', '💸 Transfers'],
+        ['🔑 Login', '🚪 Logout']
+    ])
+        .resize()
+        .oneTime();
+
+    ctx.reply('Here\'s the menu:', menuKeyboard);
+});
+
 bot.command('login', (ctx) => {
     console.log("🔑 Login command received");
-    ctx.reply('Please enter your email address:');
+    const cancelButton = Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+    ]);
+    ctx.reply('Please enter your email address:', cancelButton);
     sessions.set(ctx.from.id, { step: 'awaiting_email' });
 });
 
@@ -200,7 +438,7 @@ bot.command('transfers', isAuthenticated, async (ctx) => {
             message += `\n🔹 *Transfer ID:* ${transfer.id}`;
             message += `\nType: ${transfer.type}`;
             message += `\nStatus: ${transfer.status}`;
-            message += `\nAmount: ${transfer.amount} ${transfer.currency}`;
+            message += `\nAmount: ${transfer.amount / 1e8} ${transfer.currency}`;
             message += `\nFee: ${transfer.totalFee} ${transfer.feeCurrency}`;
             message += `\nDate: ${new Date(transfer.createdAt).toLocaleString()}`;
             message += `\nFrom: ${transfer.sourceCountry?.toUpperCase() || 'N/A'}`;
@@ -306,12 +544,15 @@ bot.command('send', isAuthenticated, async (ctx) => {
         sessions.set(ctx.from.id, {
             step: 'send_wallet_address',
             sendData: {
-                purposeCode: 'self',  // Set to "self"
-                currency: 'USDC'      // Set to "USDC"
+                purposeCode: 'self',
+                currency: 'USDC'
             },
             token: ctx.state.token
         });
-        ctx.reply('Please enter the recipient\'s wallet address:');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
     } catch (error: any) {
         console.error('Error:', error);
         ctx.reply('❌ Failed to start transfer. Please try again.');
@@ -324,12 +565,15 @@ bot.command('walletwithdraw', isAuthenticated, async (ctx) => {
         sessions.set(ctx.from.id, {
             step: 'withdraw_wallet_address',
             withdrawData: {
-                purposeCode: 'self',  // Set to "self"
-                currency: 'USDC'      // Set to "USDC"
+                purposeCode: 'self',
+                currency: 'USDC'
             },
             token: ctx.state.token
         });
-        ctx.reply('Please enter the recipient\'s wallet address:');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
     } catch (error: any) {
         console.error('Error:', error);
         ctx.reply('❌ Failed to start withdrawal. Please try again.');
@@ -346,7 +590,10 @@ bot.command('sendbatch', isAuthenticated, async (ctx) => {
             },
             token: ctx.state.token
         });
-        ctx.reply('Please enter the recipient\'s wallet address:');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
     } catch (error: any) {
         console.error('Error:', error);
         ctx.reply('❌ Failed to start batch transfer. Please try again.');
@@ -364,7 +611,10 @@ bot.on('text', async (ctx) => {
             console.log("📧 Sending OTP request for email:", email);
             const response = await axios.post(`${API_BASE_URL}/auth/email-otp/request`, { email });
             sessions.set(ctx.from.id, { step: 'awaiting_otp', email, sid: response.data.sid });
-            ctx.reply('OTP sent to your email. Please enter the OTP:');
+            const cancelButton = Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+            ]);
+            ctx.reply('OTP sent to your email. Please enter the OTP:', cancelButton);
         } catch (error) {
             console.error("❌ Error sending OTP:", error);
             ctx.reply('Error sending OTP. Please try again.');
@@ -379,7 +629,28 @@ bot.on('text', async (ctx) => {
             console.log("✅ Authentication successful, storing user data");
             // Store the entire response data
             await storeSession(ctx.from.id, JSON.stringify(response.data));
-            ctx.reply('✅ Login successful! You are now authenticated.');
+
+            // Create menu inline keyboard
+            const menuButtons = Markup.inlineKeyboard([
+                [
+                    Markup.button.callback('💰 Balance', 'menu_balance'),
+                    Markup.button.callback('👛 Wallets', 'menu_wallets')
+                ],
+                [
+                    Markup.button.callback('📤 Send', 'menu_send'),
+                    Markup.button.callback('📥 Withdraw', 'menu_withdraw')
+                ],
+                [
+                    Markup.button.callback('📦 Batch Send', 'menu_batch'),
+                    Markup.button.callback('💸 Transfers', 'menu_transfers')
+                ],
+                [
+                    Markup.button.callback('🔑 Login', 'menu_login'),
+                    Markup.button.callback('🚪 Logout', 'menu_logout')
+                ]
+            ]);
+
+            ctx.reply('✅ Login successful! You are now authenticated.\n\nWhat would you like to do?', menuButtons);
             sessions.delete(ctx.from.id);
         } catch (error) {
             console.error("❌ Authentication error:", error);
@@ -388,13 +659,19 @@ bot.on('text', async (ctx) => {
     } else if (userSession.step === 'send_wallet_address') {
         userSession.sendData.walletAddress = ctx.message.text;
         userSession.step = 'send_amount';
-        ctx.reply('Please enter the amount to send (minimum 1 USDC):');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the amount to send (minimum 1 USDC):', cancelButton);
     } else if (userSession.step === 'send_amount') {
         const amount = parseFloat(ctx.message.text);
 
         // Check if amount is at least 1 USDC
         if (amount < 1) {
-            ctx.reply('❌ Minimum transfer amount is 1 USDC. Please enter a larger amount:');
+            const cancelButton = Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+            ]);
+            ctx.reply('❌ Minimum transfer amount is 1 USDC. Please enter a larger amount:', cancelButton);
             return;
         }
 
@@ -424,13 +701,19 @@ bot.on('text', async (ctx) => {
     } else if (userSession.step === 'withdraw_wallet_address') {
         userSession.withdrawData.walletAddress = ctx.message.text;
         userSession.step = 'withdraw_amount';
-        ctx.reply('Please enter the amount to withdraw (minimum 1 USDC):');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the amount to withdraw (minimum 1 USDC):', cancelButton);
     } else if (userSession.step === 'withdraw_amount') {
         const amount = parseFloat(ctx.message.text);
 
         // Check if amount is at least 1 USDC
         if (amount < 1) {
-            ctx.reply('❌ Minimum withdrawal amount is 1 USDC. Please enter a larger amount:');
+            const cancelButton = Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+            ]);
+            ctx.reply('❌ Minimum withdrawal amount is 1 USDC. Please enter a larger amount:', cancelButton);
             return;
         }
 
@@ -464,21 +747,33 @@ bot.on('text', async (ctx) => {
             }
         };
         userSession.step = 'batch_email';
-        ctx.reply('Please enter the recipient\'s email address:');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s email address:', cancelButton);
     } else if (userSession.step === 'batch_email') {
         userSession.currentRequest.request.email = ctx.message.text;
         userSession.step = 'batch_payee_id';
-        ctx.reply('Please enter the payee ID:');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the payee ID:', cancelButton);
     } else if (userSession.step === 'batch_payee_id') {
         userSession.currentRequest.request.payeeId = ctx.message.text;
         userSession.step = 'batch_amount';
-        ctx.reply('Please enter the amount to send (minimum 1 USDC):');
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the amount to send (minimum 1 USDC):', cancelButton);
     } else if (userSession.step === 'batch_amount') {
         const amount = parseFloat(ctx.message.text);
 
         // Check if amount is at least 1 USDC
         if (amount < 1) {
-            ctx.reply('❌ Minimum transfer amount is 1 USDC. Please enter a larger amount:');
+            const cancelButton = Markup.inlineKeyboard([
+                [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+            ]);
+            ctx.reply('❌ Minimum transfer amount is 1 USDC. Please enter a larger amount:', cancelButton);
             return;
         }
 
@@ -741,6 +1036,302 @@ bot.action('confirm_batch_yes', async (ctx) => {
 bot.action('confirm_batch_no', async (ctx) => {
     await ctx.editMessageText('❌ Batch transfer cancelled.');
     sessions.delete(ctx.from.id);
+});
+
+// Add handler for cancel button callback
+bot.action('cancel_operation', async (ctx) => {
+    const userId = ctx.from?.id;
+    if (!userId) return;
+
+    const userSession = sessions.get(userId);
+    if (userSession) {
+        sessions.delete(userId);
+        const menuButtons = Markup.inlineKeyboard([
+            [
+                Markup.button.callback('💰 Balance', 'menu_balance'),
+                Markup.button.callback('👛 Wallets', 'menu_wallets')
+            ],
+            [
+                Markup.button.callback('📤 Send', 'menu_send'),
+                Markup.button.callback('📥 Withdraw', 'menu_withdraw')
+            ],
+            [
+                Markup.button.callback('📦 Batch Send', 'menu_batch'),
+                Markup.button.callback('💸 Transfers', 'menu_transfers')
+            ],
+            [
+                Markup.button.callback('🔑 Login', 'menu_login'),
+                Markup.button.callback('🚪 Logout', 'menu_logout')
+            ]
+        ]);
+        await ctx.editMessageText('Operation cancelled.');
+        ctx.reply('What would you like to do?', menuButtons);
+    } else {
+        await ctx.answerCbQuery('No active operation to cancel.');
+    }
+});
+
+// Add handlers for menu button actions
+bot.action('menu_balance', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        const response = await axios.get(`${API_BASE_URL}/wallets/balances`, {
+            headers: {
+                Authorization: `Bearer ${ctx.state.token}`
+            }
+        });
+
+        const wallets = response.data;
+        if (!wallets.length) {
+            return ctx.reply('💰 Your wallet has no funds.');
+        }
+
+        let message = '📊 *Your Wallet Balances:*';
+        wallets.forEach((wallet: any) => {
+            const isTestnet = ['80002'].includes(wallet.network);
+            message += `\n🔹 *${wallet.network}${isTestnet ? ' (Testnet)' : ''} Wallet*`;
+            wallet.balances.forEach((balance: any) => {
+                message += `\n    - ${balance.balance} ${balance.symbol}`;
+            });
+        });
+
+        ctx.replyWithMarkdown(message);
+    } catch (error: any) {
+        console.error('❌ Error details:', error);
+        ctx.reply('⚠️ Failed to fetch balance. Please try again later.');
+    }
+});
+
+bot.action('menu_wallets', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        const response = await axios.get(`${API_BASE_URL}/wallets`, {
+            headers: {
+                Authorization: `Bearer ${ctx.state.token}`
+            }
+        });
+
+        const wallets = response.data;
+        if (!wallets.length) {
+            return ctx.reply('👛 You have no wallets.');
+        }
+
+        let message = '👛 *Your Wallets:*';
+        wallets.forEach((wallet: any) => {
+            message += `\n\n🔹 *${wallet.network} Wallet*`;
+            message += `\nAddress: \`${wallet.walletAddress}\``;
+            message += `\nType: ${wallet.walletType}`;
+            message += `\nDefault: ${wallet.isDefault ? '✅' : '❌'}`;
+            message += `\nCreated: ${new Date(wallet.createdAt).toLocaleDateString()}`;
+        });
+
+        const buttons = wallets.map((wallet: any) => [
+            Markup.button.callback(
+                `Set ${wallet.network} as Default ${wallet.isDefault ? '✅' : ''}`,
+                `set_default_${wallet.id}`
+            )
+        ]);
+
+        const keyboard = Markup.inlineKeyboard(buttons);
+        await ctx.replyWithMarkdown(message, keyboard);
+    } catch (error: any) {
+        console.error('❌ Error details:', error);
+        ctx.reply('⚠️ Failed to fetch wallets. Please try again later.');
+    }
+});
+
+bot.action('menu_send', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        sessions.set(ctx.from.id, {
+            step: 'send_wallet_address',
+            sendData: {
+                purposeCode: 'self',
+                currency: 'USDC'
+            },
+            token: ctx.state.token
+        });
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+    } catch (error: any) {
+        console.error('Error:', error);
+        ctx.reply('❌ Failed to start transfer. Please try again.');
+    }
+});
+
+bot.action('menu_withdraw', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        sessions.set(ctx.from.id, {
+            step: 'withdraw_wallet_address',
+            withdrawData: {
+                purposeCode: 'self',
+                currency: 'USDC'
+            },
+            token: ctx.state.token
+        });
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+    } catch (error: any) {
+        console.error('Error:', error);
+        ctx.reply('❌ Failed to start withdrawal. Please try again.');
+    }
+});
+
+bot.action('menu_batch', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        sessions.set(ctx.from.id, {
+            step: 'batch_wallet_address',
+            batchData: {
+                requests: []
+            },
+            token: ctx.state.token
+        });
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter the recipient\'s wallet address:', cancelButton);
+    } catch (error: any) {
+        console.error('Error:', error);
+        ctx.reply('❌ Failed to start batch transfer. Please try again.');
+    }
+});
+
+bot.action('menu_transfers', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        const params = {
+            page: 1,
+            limit: 10,
+            sync: true
+        };
+
+        const response = await axios.get(`${API_BASE_URL}/transfers`, {
+            headers: {
+                Authorization: `Bearer ${ctx.state.token}`
+            },
+            params
+        });
+
+        const { data, count, hasMore } = response.data;
+        if (!data.length) {
+            return ctx.reply('💸 No transfers found.');
+        }
+
+        let message = '💸 *Your Recent Transfers:*\n';
+        data.forEach((transfer: any) => {
+            message += `\n🔹 *Transfer ID:* ${transfer.id}`;
+            message += `\nType: ${transfer.type}`;
+            message += `\nStatus: ${transfer.status}`;
+            message += `\nAmount: ${transfer.amount / 1e8} ${transfer.currency}`;
+            message += `\nFee: ${transfer.totalFee} ${transfer.feeCurrency}`;
+            message += `\nDate: ${new Date(transfer.createdAt).toLocaleString()}`;
+            message += `\nFrom: ${transfer.sourceCountry?.toUpperCase() || 'N/A'}`;
+            message += `\nTo: ${transfer.destinationCountry?.toUpperCase() || 'N/A'}`;
+            message += '\n';
+        });
+
+        message += `\n📊 Page ${params.page} of ${Math.ceil(count / params.limit)}`;
+        if (hasMore) {
+            message += '\n\nUse /transfers_next to see more transfers.';
+        }
+
+        const buttons = [];
+        if (params.page > 1) {
+            buttons.push(Markup.button.callback('⬅️ Previous', 'transfers_prev'));
+        }
+        if (hasMore) {
+            buttons.push(Markup.button.callback('Next ➡️', 'transfers_next'));
+        }
+        const keyboard = buttons.length > 0 ? Markup.inlineKeyboard(buttons) : undefined;
+
+        await ctx.replyWithMarkdown(message, keyboard);
+    } catch (error: any) {
+        console.error('❌ Error details:', error);
+        ctx.reply('⚠️ Failed to fetch transfers. Please try again later.');
+    }
+});
+
+bot.action('menu_login', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const cancelButton = Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+    ]);
+    ctx.reply('Please enter your email address:', cancelButton);
+    sessions.set(ctx.from.id, { step: 'awaiting_email' });
+});
+
+bot.action('menu_logout', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    await logoutUser(ctx.from.id);
+    ctx.reply('✅ You have been logged out successfully.');
 });
 
 console.log("🚀 Launching bot...");
