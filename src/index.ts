@@ -13,6 +13,16 @@ const API_BASE_URL = 'https://income-api.copperx.io/api';
 // Store user sessions
 const sessions = new Map();
 
+const persistentKeyboard = Markup.keyboard([
+    ['👤 Profile', '💰 Balance', '👛 Wallets'],
+    ['📤 Send', '📥 Withdraw'],
+    ['📦 Batch Send', '💸 Transfers'],
+    ['🔑 Login', '🚪 Logout'],
+    ['🔍 KYC Status']
+])
+    .resize()  // Resizes buttons to be smaller
+    .persistent(true);  // Makes the keyboard persistent (stays visible)
+
 const isAuthenticated = async (ctx: any, next: any) => {
     console.log("🔍 Inside isAuthenticated middleware");
     const userId = ctx.from.id;
@@ -23,7 +33,11 @@ const isAuthenticated = async (ctx: any, next: any) => {
 
     if (!userData) {
         console.log("❌ No user data found");
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
 
     try {
@@ -42,11 +56,11 @@ const isAuthenticated = async (ctx: any, next: any) => {
 
 bot.start((ctx) => {
     console.log("🚀 Bot started");
-    ctx.reply('Welcome to Copperx Bot! Use /login to authenticate.');
+    ctx.reply('Welcome to Copperx Bot! Use /login to authenticate.', persistentKeyboard);
 });
 
 // Add handler for menu buttons
-bot.hears(['💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 Batch Send', '💸 Transfers', '🔑 Login', '🚪 Logout'], async (ctx) => {
+bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 Batch Send', '💸 Transfers', '🔑 Login', '🚪 Logout', '🔍 KYC Status'], async (ctx) => {
     const command = ctx.message.text;
 
     // First check authentication for protected commands
@@ -55,7 +69,11 @@ bot.hears(['💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 B
         const userData = await getSession(userId);
 
         if (!userData) {
-            return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+            return ctx.reply('❌ You are not logged in.',
+                Markup.inlineKeyboard([
+                    [Markup.button.callback('🔑 Login', 'menu_login')]
+                ])
+            );
         }
 
         try {
@@ -68,6 +86,32 @@ bot.hears(['💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 B
     }
 
     switch (command) {
+        case '👤 Profile':
+            try {
+                const token = ctx.state.token;
+                const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                });
+
+                const profile = response.data;
+                let message = '👤 *Your Profile*\n\n';
+                message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
+                message += `*Email:* ${profile.email}\n`;
+                message += `*Role:* ${profile.role}\n`;
+                message += `*Status:* ${profile.status}\n`;
+                message += `*Type:* ${profile.type}\n`;
+                message += `\n💼 *Wallet Information*\n`;
+                message += `*Address:* \`${profile.walletAddress || 'Not set'}\`\n`;
+                message += `*Type:* ${profile.walletAccountType || 'Not set'}\n`;
+
+                await ctx.replyWithMarkdown(message);
+            } catch (error) {
+                console.error('Error fetching profile:', error);
+                ctx.reply('❌ Failed to fetch profile. Please try again.');
+            }
+            break;
         case '💰 Balance':
             console.log("💰 Balance command received");
             try {
@@ -261,24 +305,53 @@ bot.hears(['💰 Balance', '👛 Wallets', '📤 Send', '📥 Withdraw', '📦 B
         case '🚪 Logout':
             console.log("👋 Logout command received");
             await logoutUser(ctx.from.id);
-            ctx.reply('✅ You have been logged out successfully.');
+            ctx.reply('✅ You have been logged out successfully.', persistentKeyboard);
             break;
+        case '🔍 KYC Status':
+
+            try {
+
+
+                const response = await axios.get(`${API_BASE_URL}/kycs`, {
+                    headers: {
+                        Authorization: `Bearer ${ctx.state.token}`
+                    }
+                });
+
+                const { data } = response.data;
+                if (!data.length) {
+                    const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
+                    const keyboard = Markup.inlineKeyboard([
+                        [Markup.button.url('🔗 Complete KYC', 'https://copperx.io')]
+                    ]);
+                    return ctx.replyWithMarkdown(message, keyboard);
+                }
+
+                const kyc = data[0];
+                let message = '🔍 *KYC Status Information*\n\n';
+                message += `*Status:* ${kyc.status.toUpperCase()}\n`;
+                message += `*Type:* ${kyc.type}\n`;
+                message += `*Country:* ${kyc.country}\n`;
+                message += `*Provider:* ${kyc.kycProviderCode}\n\n`;
+
+                if (kyc.kycDetail?.kycUrl) {
+                    const keyboard = Markup.inlineKeyboard([
+                        [Markup.button.url('🔗 Complete KYC', kyc.kycDetail.kycUrl)]
+                    ]);
+                    await ctx.replyWithMarkdown(message, keyboard);
+                } else {
+                    await ctx.replyWithMarkdown(message);
+                }
+            } catch (error) {
+                console.error('Error fetching KYC status:', error);
+                ctx.reply('❌ Failed to fetch KYC status. Please try again.');
+            }
+            break;
+
     }
 });
 
 // Add a command to show menu anytime
-bot.command('menu', (ctx) => {
-    const menuKeyboard = Markup.keyboard([
-        ['💰 Balance', '👛 Wallets'],
-        ['📤 Send', '📥 Withdraw'],
-        ['📦 Batch Send', '💸 Transfers'],
-        ['🔑 Login', '🚪 Logout']
-    ])
-        .resize()
-        .oneTime();
-
-    ctx.reply('Here\'s the menu:', menuKeyboard);
-});
 
 bot.command('login', (ctx) => {
     console.log("🔑 Login command received");
@@ -292,7 +365,7 @@ bot.command('login', (ctx) => {
 bot.command('logout', async (ctx) => {
     console.log("👋 Logout command received");
     await logoutUser(ctx.from.id);
-    ctx.reply('✅ You have been logged out successfully.');
+    ctx.reply('✅ You have been logged out successfully.', persistentKeyboard);
 });
 
 bot.command('balance', isAuthenticated, async (ctx) => {
@@ -337,7 +410,7 @@ bot.command('wallets', isAuthenticated, async (ctx) => {
     console.log("👛 Wallets command received");
     try {
         const token = ctx.state.token;
-        console.log('🔑 Token from state:', token);
+        console.log(' Token from state:', token);
 
         const response = await axios.get(`${API_BASE_URL}/wallets`, {
             headers: {
@@ -529,7 +602,7 @@ bot.action(/transfers_(prev|next)/, isAuthenticated, async (ctx) => {
 
         await ctx.editMessageText(message, {
             parse_mode: 'Markdown',
-            ...keyboard
+            reply_markup: keyboard?.reply_markup,
         });
         await ctx.answerCbQuery();
     } catch (error: any) {
@@ -599,7 +672,104 @@ bot.command('sendbatch', isAuthenticated, async (ctx) => {
         ctx.reply('❌ Failed to start batch transfer. Please try again.');
     }
 });
+bot.command('profile', isAuthenticated, async (ctx) => {
+    try {
+        const token = ctx.state.token;
+        const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
 
+        const profile = response.data;
+        let message = '👤 *Your Profile*\n\n';
+        message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
+        message += `*Email:* ${profile.email}\n`;
+        message += `*Role:* ${profile.role}\n`;
+        message += `*Status:* ${profile.status}\n`;
+        message += `*Type:* ${profile.type}\n`;
+        message += `\n💼 *Wallet Information*\n`;
+        message += `*Address:* \`${profile.walletAddress || 'Not set'}\`\n`;
+        message += `*Type:* ${profile.walletAccountType || 'Not set'}\n`;
+
+        await ctx.replyWithMarkdown(message);
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        ctx.reply('❌ Failed to fetch profile. Please try again.');
+    }
+});
+bot.command('kycstatus', isAuthenticated, async (ctx) => {
+    try {
+        const token = ctx.state.token;
+        const response = await axios.get(`${API_BASE_URL}/kycs`, {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        });
+
+        const { data } = response.data;
+        if (!data.length) {
+            const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.url('🔗 Complete KYC', 'https://copperx.io')]
+            ]);
+            return ctx.replyWithMarkdown(message, keyboard);
+        }
+
+        const kyc = data[0]; // Get the first KYC record
+        let message = '🔍 *KYC Status Information*\n\n';
+
+        // Basic KYC Info
+        message += `*Status:* ${kyc.status.toUpperCase()}\n`;
+        message += `*Type:* ${kyc.type}\n`;
+        message += `*Country:* ${kyc.country}\n`;
+        message += `*Provider:* ${kyc.kycProviderCode}\n\n`;
+
+        // Individual KYC Details
+        if (kyc.kycDetail) {
+            message += '👤 *Personal Information*\n';
+            message += `*Name:* ${kyc.kycDetail.firstName} ${kyc.kycDetail.middleName || ''} ${kyc.kycDetail.lastName}\n`;
+            message += `*Email:* ${kyc.kycDetail.email}\n`;
+            message += `*Phone:* ${kyc.kycDetail.phoneNumber}\n`;
+            message += `*Nationality:* ${kyc.kycDetail.nationality}\n`;
+            message += `*DOB:* ${kyc.kycDetail.dateOfBirth}\n\n`;
+
+            // Address
+            message += '📍 *Address*\n';
+            message += `${kyc.kycDetail.addressLine1}\n`;
+            if (kyc.kycDetail.addressLine2) message += `${kyc.kycDetail.addressLine2}\n`;
+            message += `${kyc.kycDetail.city}, ${kyc.kycDetail.state} ${kyc.kycDetail.postalCode}\n`;
+            message += `${kyc.kycDetail.country}\n\n`;
+
+            // Verification Status
+            if (kyc.kycDetail.currentKycVerification) {
+                message += '✅ *Verification Status*\n';
+                message += `*Status:* ${kyc.kycDetail.currentKycVerification.status.toUpperCase()}\n`;
+                if (kyc.kycDetail.currentKycVerification.verifiedAt) {
+                    message += `*Verified At:* ${new Date(kyc.kycDetail.currentKycVerification.verifiedAt).toLocaleString()}\n`;
+                }
+            }
+
+            // Documents
+            if (kyc.kycDetail.kycDocuments?.length > 0) {
+                message += '\n📄 *Documents*\n';
+                kyc.kycDetail.kycDocuments.forEach((doc: any) => {
+                    message += `- ${doc.documentType.replace(/_/g, ' ').toUpperCase()}: ${doc.status.toUpperCase()}\n`;
+                });
+            }
+        }
+
+        // Add KYC URL if available
+        if (kyc.kycDetail?.kycUrl) {
+            message += `\n🔗 [Complete KYC Process](${kyc.kycDetail.kycUrl})\n`;
+        }
+
+        await ctx.replyWithMarkdown(message);
+    } catch (error) {
+        console.error('Error fetching KYC status:', error);
+        ctx.reply('❌ Failed to fetch KYC status. Please try again.');
+    }
+});
 bot.on('text', async (ctx) => {
     console.log("📝 Text message received:", ctx.message.text);
     const userSession = sessions.get(ctx.from.id);
@@ -634,6 +804,7 @@ bot.on('text', async (ctx) => {
             const menuButtons = Markup.inlineKeyboard([
                 [
                     Markup.button.callback('💰 Balance', 'menu_balance'),
+                    Markup.button.callback('👤 Profile', 'menu_profile'),
                     Markup.button.callback('👛 Wallets', 'menu_wallets')
                 ],
                 [
@@ -647,6 +818,9 @@ bot.on('text', async (ctx) => {
                 [
                     Markup.button.callback('🔑 Login', 'menu_login'),
                     Markup.button.callback('🚪 Logout', 'menu_logout')
+                ],
+                [
+                    Markup.button.callback('🔍 KYC Status', 'menu_kyc')
                 ]
             ]);
 
@@ -1048,8 +1222,9 @@ bot.action('cancel_operation', async (ctx) => {
         sessions.delete(userId);
         const menuButtons = Markup.inlineKeyboard([
             [
+                Markup.button.callback('� Profile', 'menu_profile'),
                 Markup.button.callback('💰 Balance', 'menu_balance'),
-                Markup.button.callback('👛 Wallets', 'menu_wallets')
+                Markup.button.callback('�👛 Wallets', 'menu_wallets')
             ],
             [
                 Markup.button.callback('📤 Send', 'menu_send'),
@@ -1062,6 +1237,9 @@ bot.action('cancel_operation', async (ctx) => {
             [
                 Markup.button.callback('🔑 Login', 'menu_login'),
                 Markup.button.callback('🚪 Logout', 'menu_logout')
+            ],
+            [
+                Markup.button.callback('🔍 KYC Status', 'menu_kyc')
             ]
         ]);
         await ctx.editMessageText('Operation cancelled.');
@@ -1078,7 +1256,11 @@ bot.action('menu_balance', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1118,7 +1300,11 @@ bot.action('menu_wallets', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1166,7 +1352,11 @@ bot.action('menu_send', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1197,7 +1387,11 @@ bot.action('menu_withdraw', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1228,7 +1422,11 @@ bot.action('menu_batch', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1258,7 +1456,11 @@ bot.action('menu_transfers', async (ctx) => {
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
-        return ctx.reply('❌ You are not logged in. Use /login to authenticate.');
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
     }
     try {
         const parsedData = JSON.parse(userData);
@@ -1317,21 +1519,150 @@ bot.action('menu_transfers', async (ctx) => {
     }
 });
 
-bot.action('menu_login', async (ctx) => {
+bot.action('menu_profile', async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.deleteMessage();
-    const cancelButton = Markup.inlineKeyboard([
-        [Markup.button.callback('❌ Cancel', 'cancel_operation')]
-    ]);
-    ctx.reply('Please enter your email address:', cancelButton);
-    sessions.set(ctx.from.id, { step: 'awaiting_email' });
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        const token = parsedData.accessToken;
+        const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const profile = response.data;
+        let message = '👤 *Your Profile*\n\n';
+        message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
+        message += `*Email:* ${profile.email}\n`;
+        message += `*Role:* ${profile.role}\n`;
+        message += `*Status:* ${profile.status}\n`;
+        message += `*Type:* ${profile.type}\n`;
+        message += `\n💼 *Wallet Information*\n`;
+        message += `*Address:* \`${profile.walletAddress || 'Not set'}\`\n`;
+        message += `*Type:* ${profile.walletAccountType || 'Not set'}\n`;
+
+        await ctx.replyWithMarkdown(message);
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        ctx.reply('❌ Failed to fetch profile. Please try again.');
+    }
+});
+
+bot.action('menu_login', async (ctx) => {
+    try {
+        await ctx.answerCbQuery();
+        await ctx.deleteMessage();
+        const cancelButton = Markup.inlineKeyboard([
+            [Markup.button.callback('❌ Cancel', 'cancel_operation')]
+        ]);
+        ctx.reply('Please enter your email address:', cancelButton);
+        sessions.set(ctx.from.id, { step: 'awaiting_email' });
+    } catch (error: any) {
+        // If it's a query timeout error, send a new message
+        if (error.description && error.description.includes('query is too old')) {
+            ctx.reply('⚠️ The login button has expired. Please try again.',
+                Markup.inlineKeyboard([
+                    [Markup.button.callback('🔑 Login', 'menu_login')]
+                ])
+            );
+            return;
+        }
+        // Handle other errors
+        console.error('Error in menu_login:', error);
+        ctx.reply('❌ An error occurred. Please try again.');
+    }
 });
 
 bot.action('menu_logout', async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.deleteMessage();
     await logoutUser(ctx.from.id);
-    ctx.reply('✅ You have been logged out successfully.');
+    ctx.reply('✅ You have been logged out successfully.', persistentKeyboard);
+});
+
+// Add a general error handler for callback queries
+bot.catch((err: any, ctx: any) => {
+    console.error('⚠️ Error handling update:', err);
+
+    // Check if it's a callback query error
+    if (err.description && err.description.includes('query is too old')) {
+        // For expired callback queries, send a new message
+        ctx.reply('⚠️ This button has expired. Please use a more recent message or command.');
+        return;
+    }
+
+    // For other errors, notify the user
+    ctx.reply('❌ An error occurred. Please try again.');
+});
+
+// Add command handler for KYC status
+
+
+// Add handler for keyboard button
+bot.hears('🔍 KYC Status', async (ctx: any) => {
+    await bot.command('kycstatus', ctx);
+});
+
+// Add menu button action
+bot.action('menu_kyc', async (ctx: any) => {
+    await ctx.answerCbQuery();
+    await ctx.deleteMessage();
+    const userId = ctx.from.id;
+    const userData = await getSession(userId);
+    if (!userData) {
+        return ctx.reply('❌ You are not logged in.',
+            Markup.inlineKeyboard([
+                [Markup.button.callback('🔑 Login', 'menu_login')]
+            ])
+        );
+    }
+    try {
+        const parsedData = JSON.parse(userData);
+        ctx.state.userData = parsedData;
+        ctx.state.token = parsedData.accessToken;
+
+        const response = await axios.get(`${API_BASE_URL}/kycs`, {
+            headers: {
+                Authorization: `Bearer ${ctx.state.token}`
+            }
+        });
+
+        const { data } = response.data;
+        if (!data.length) {
+            const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.url('🔗 Complete KYC', 'https://copperx.io')]
+            ]);
+            return ctx.replyWithMarkdown(message, keyboard);
+        }
+
+        const kyc = data[0];
+        let message = '🔍 *KYC Status Information*\n\n';
+        message += `*Status:* ${kyc.status.toUpperCase()}\n`;
+        message += `*Type:* ${kyc.type}\n`;
+        message += `*Country:* ${kyc.country}\n`;
+        message += `*Provider:* ${kyc.kycProviderCode}\n\n`;
+
+        if (kyc.kycDetail?.kycUrl) {
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.url('🔗 Complete KYC', kyc.kycDetail.kycUrl)]
+            ]);
+            await ctx.replyWithMarkdown(message, keyboard);
+        } else {
+            await ctx.replyWithMarkdown(message);
+        }
+    } catch (error) {
+        console.error('Error fetching KYC status:', error);
+        ctx.reply('❌ Failed to fetch KYC status. Please try again.');
+    }
 });
 
 console.log("🚀 Launching bot...");
