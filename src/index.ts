@@ -95,7 +95,7 @@ bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Wi
                     }
                 });
 
-                const profile = response.data;
+                const profile: any = response.data;
                 let message = '👤 *Your Profile*\n\n';
                 message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
                 message += `*Email:* ${profile.email}\n`;
@@ -122,7 +122,7 @@ bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Wi
                     }
                 });
 
-                const wallets = response.data;
+                const wallets: any = response.data;
                 if (!wallets.length) {
                     return ctx.reply('💰 Your wallet has no funds.');
                 }
@@ -152,7 +152,7 @@ bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Wi
                     }
                 });
 
-                const wallets = response.data;
+                const wallets: any = response.data;
                 if (!wallets.length) {
                     return ctx.reply('👛 You have no wallets.');
                 }
@@ -256,7 +256,7 @@ bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Wi
                     params
                 });
 
-                const { data, count, hasMore } = response.data;
+                const { data, count, hasMore }: any = response.data;
                 if (!data.length) {
                     return ctx.reply('💸 No transfers found.');
                 }
@@ -318,7 +318,7 @@ bot.hears(['👤 Profile', '💰 Balance', '👛 Wallets', '📤 Send', '📥 Wi
                     }
                 });
 
-                const { data } = response.data;
+                const { data }: any = response.data;
                 if (!data.length) {
                     const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
                     const keyboard = Markup.inlineKeyboard([
@@ -382,7 +382,7 @@ bot.command('balance', isAuthenticated, async (ctx) => {
         });
         console.log('📊 API Response:', response.data);
 
-        const wallets = response.data;
+        const wallets: any = response.data;
         if (!wallets.length) {
             return ctx.reply('💰 Your wallet has no funds.');
         }
@@ -419,7 +419,7 @@ bot.command('wallets', isAuthenticated, async (ctx) => {
         });
         console.log('📊 API Response:', response.data);
 
-        const wallets = response.data;
+        const wallets: any = response.data;
         if (!wallets.length) {
             return ctx.reply('👛 You have no wallets.');
         }
@@ -501,7 +501,7 @@ bot.command('transfers', isAuthenticated, async (ctx) => {
         });
         console.log('📊 API Response:', response.data);
 
-        const { data, count, hasMore } = response.data;
+        const { data, count, hasMore }: any = response.data;
         if (!data.length) {
             return ctx.reply('💸 No transfers found.');
         }
@@ -566,7 +566,7 @@ bot.action(/transfers_(prev|next)/, isAuthenticated, async (ctx) => {
             params
         });
 
-        const { data, count, hasMore } = response.data;
+        const { data, count, hasMore }: any = response.data;
         if (!data.length) {
             await ctx.answerCbQuery('No more transfers to show');
             return;
@@ -681,7 +681,7 @@ bot.command('profile', isAuthenticated, async (ctx) => {
             }
         });
 
-        const profile = response.data;
+        const profile: any = response.data;
         let message = '👤 *Your Profile*\n\n';
         message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
         message += `*Email:* ${profile.email}\n`;
@@ -707,7 +707,7 @@ bot.command('kycstatus', isAuthenticated, async (ctx) => {
             }
         });
 
-        const { data } = response.data;
+        const { data }: any = response.data;
         if (!data.length) {
             const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
             const keyboard = Markup.inlineKeyboard([
@@ -779,7 +779,7 @@ bot.on('text', async (ctx) => {
         const email = ctx.message.text;
         try {
             console.log("📧 Sending OTP request for email:", email);
-            const response = await axios.post(`${API_BASE_URL}/auth/email-otp/request`, { email });
+            const response: any = await axios.post(`${API_BASE_URL}/auth/email-otp/request`, { email });
             sessions.set(ctx.from.id, { step: 'awaiting_otp', email, sid: response.data.sid });
             const cancelButton = Markup.inlineKeyboard([
                 [Markup.button.callback('❌ Cancel', 'cancel_operation')]
@@ -999,7 +999,7 @@ bot.action('confirm_transfer_yes', async (ctx) => {
             }
         );
 
-        const transfer = response.data;
+        const transfer: any = response.data;
         let message = '✅ *Transfer Initiated Successfully!*\n\n';
         message += `🔹 *Transfer ID:* ${transfer.id}`;
         message += `\nType: ${transfer.type}`;
@@ -1070,7 +1070,7 @@ bot.action('confirm_withdraw_yes', async (ctx) => {
             }
         );
 
-        const withdrawal = response.data;
+        const withdrawal: any = response.data;
         let message = '✅ *Withdrawal Initiated Successfully!*\n\n';
         message += `🔹 *Withdrawal ID:* ${withdrawal.id}`;
         message += `\nType: ${withdrawal.type}`;
@@ -1154,7 +1154,7 @@ bot.action('confirm_batch_yes', async (ctx) => {
             }
         );
 
-        const batchResponse = response.data;
+        const batchResponse: any = response.data;
         let message = '✅ *Batch Transfer Initiated Successfully!*\n\n';
 
         // Process each response in the batch
@@ -1272,7 +1272,7 @@ bot.action('menu_balance', async (ctx) => {
             }
         });
 
-        const wallets = response.data;
+        const wallets: any = response.data;
         if (!wallets.length) {
             return ctx.reply('💰 Your wallet has no funds.');
         }
@@ -1315,7 +1315,7 @@ bot.action('menu_wallets', async (ctx) => {
             }
         });
 
-        const wallets = response.data;
+        const wallets: any = response.data;
         if (!wallets.length) {
             return ctx.reply('👛 You have no wallets.');
         }
@@ -1474,7 +1474,7 @@ bot.action('menu_transfers', async (ctx) => {
             params
         });
 
-        const { data, count, hasMore } = response.data;
+        const { data, count, hasMore }: any = response.data;
         if (!data.length) {
             return ctx.reply('💸 No transfers found.');
         }
@@ -1531,7 +1531,7 @@ bot.action('menu_profile', async (ctx) => {
             headers: { Authorization: `Bearer ${token}` }
         });
 
-        const profile = response.data;
+        const profile: any = response.data;
         let message = '👤 *Your Profile*\n\n';
         message += `*Name:* ${profile.firstName} ${profile.lastName}\n`;
         message += `*Email:* ${profile.email}\n`;
@@ -1620,7 +1620,7 @@ bot.action('menu_kyc', async (ctx: any) => {
             }
         });
 
-        const { data } = response.data;
+        const { data }: any = response.data;
         if (!data.length) {
             const message = '❌ Please complete your KYC process at [Copperx.io](https://copperx.io)';
             const keyboard = Markup.inlineKeyboard([
