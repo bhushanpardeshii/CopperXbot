@@ -1252,7 +1252,6 @@ bot.action('cancel_operation', async (ctx) => {
 // Add handlers for menu button actions
 bot.action('menu_balance', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1296,7 +1295,6 @@ bot.action('menu_balance', async (ctx) => {
 
 bot.action('menu_wallets', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1348,7 +1346,6 @@ bot.action('menu_wallets', async (ctx) => {
 
 bot.action('menu_send', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1383,7 +1380,6 @@ bot.action('menu_send', async (ctx) => {
 
 bot.action('menu_withdraw', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1418,7 +1414,6 @@ bot.action('menu_withdraw', async (ctx) => {
 
 bot.action('menu_batch', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1452,7 +1447,6 @@ bot.action('menu_batch', async (ctx) => {
 
 bot.action('menu_transfers', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1521,7 +1515,6 @@ bot.action('menu_transfers', async (ctx) => {
 
 bot.action('menu_profile', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
@@ -1559,7 +1552,6 @@ bot.action('menu_profile', async (ctx) => {
 bot.action('menu_login', async (ctx) => {
     try {
         await ctx.answerCbQuery();
-        await ctx.deleteMessage();
         const cancelButton = Markup.inlineKeyboard([
             [Markup.button.callback('❌ Cancel', 'cancel_operation')]
         ]);
@@ -1583,7 +1575,6 @@ bot.action('menu_login', async (ctx) => {
 
 bot.action('menu_logout', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     await logoutUser(ctx.from.id);
     ctx.reply('✅ You have been logged out successfully.', persistentKeyboard);
 });
@@ -1603,18 +1594,12 @@ bot.catch((err: any, ctx: any) => {
     ctx.reply('❌ An error occurred. Please try again.');
 });
 
-// Add command handler for KYC status
-
-
-// Add handler for keyboard button
 bot.hears('🔍 KYC Status', async (ctx: any) => {
     await bot.command('kycstatus', ctx);
 });
 
-// Add menu button action
 bot.action('menu_kyc', async (ctx: any) => {
     await ctx.answerCbQuery();
-    await ctx.deleteMessage();
     const userId = ctx.from.id;
     const userData = await getSession(userId);
     if (!userData) {
